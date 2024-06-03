@@ -8,24 +8,50 @@ class MDP(object):
     self.nU = nU # dimension of control space
     self.gamma = gamma 
     self.L = np.zeros((nX,nU))    # stage cost: SxA -> R   
+    self.P = np.zeros((nX,nU,nX))
     for x in range(nX):
       for u in range(nU):
+        nx = P[x][u][0]
         self.L[x,u] += P[x][u][1]
+        self.P[x,u,nx] = 1
 
 def value_iteration(mdp, num_iter):
     """
     V, pi = value_iteration(mdp, num_iter)
     """
     # initialize the policy and value
-    pi = np.zeros((num_iter+1,mdp.nX),dtype='int')
-    V = np.zeros((num_iter+1,mdp.nX))
+    pi = np.zeros((num_iter+1,mdp.nX),dtype='int') # (num,nX)
+    V = np.zeros((num_iter+1,mdp.nX)) # (num,nX)
 
     # value iteration  
     for k in range(num_iter):
-        Q = mdp.L + mdp.gamma * V[k,:,None] # num_ntrm x nA
-        pi[k+1,:] = np.argmin(Q, axis=1)    
-        V[k+1,:] = np.min(Q,axis=1)
+        Q = mdp.L + mdp.gamma * np.sum(mdp.P * V[k,None,None,:], axis=2) # nX x nA
+          # nX*nA +  nX*nA(nX*nA*nX )
+        pi[k+1,:] = np.argmin(Q, axis=1) # (,nX)
+        V[k+1,:] = np.min(Q,axis=1) # (,nX)
         print(pi[k+1,:])
+    return V, pi
+
+def Qvalue_iteration(mdp, num_iter):
+    """
+    V, pi = value_iteration(mdp, num_iter)
+    """
+    # initialize the policy and value
+    pi = np.zeros((num_iter+1,mdp.nX),dtype='int') # (num,nX)
+    V = np.zeros((num_iter+1,mdp.nX)) # (num,nX)
+    iall_sta = np.arange(mdp.nX)
+    Qstar = np.zeros((num_iter+1,mdp.nX,mdp.nU)) # (num,nX,nU)   
+
+    # value iteration  
+    for k in range(num_iter):
+        pi[k,:] = np.argmin(Qstar[k,:,:], axis=1) # (,nX)
+        Vstar = np.min(Qstar[k,:,:],axis=1) # (,nX)
+        # print(mdp.L[iall_sta,pi[k]].shape)
+        # print(mdp.P[iall_sta,pi[k],:])
+        # print(Vstar[:,None,None].shape)
+        Q = mdp.L[iall_sta,pi[k]] + mdp.gamma * np.sum(mdp.P[iall_sta,pi[k],:] @ Vstar[:,None], axis=1) # (,nX)    
+        V[k+1,:] = Q
+        print(pi[k,:])
     return V, pi
 
 def policy_iteration(mdp, num_iter):
@@ -43,26 +69,20 @@ def policy_iteration(mdp, num_iter):
     for k in range(num_iter):
     
         # Policy Evaluation
-
-        A = ntrm_I - mdp.gamma 
+        Ppi = mdp.P[iall_sta, pi[k]]
+        A = ntrm_I - mdp.gamma * Ppi
         b = mdp.L[iall_sta, pi[k]]
         Vpi[k,:] = np.linalg.solve(A, b)
 
-        Qpi = mdp.L + mdp.gamma * Vpi[k,:,None]
+        Qpi = mdp.L + mdp.gamma * np.sum(mdp.P * Vpi[k,None,None,:], axis=2)
         pi[k+1,:] = np.argmin(Qpi, axis=1) 
-        
-    print(pi[k+1,:])
+        print(pi[k+1,:])
+    
     # Final Policy Evaluation
     A = ntrm_I - mdp.gamma 
     b = mdp.L[iall_sta, pi[k]]
     Vpi[k,:] = np.linalg.solve(A, b)
     return Vpi, pi
-
-
-
-
-
-
 
 
 def displayValuesText(V,pi):
@@ -75,17 +95,13 @@ def displayValuesText(V,pi):
   print("----------+--------------+---------------+---------\n")   
 
 
-
-
-
-
-
-# 0: north
-# 1: west
-# 2: south
-# 3: east
-# (result, cost)
 """
+    0: north
+    1: west
+    2: south
+    3: east
+    (result, cost)
+
     0  1  2  3  4
     5  6  7  8  9
     10 11 12 13 14
@@ -106,11 +122,13 @@ def init(nX,nU):
     for state in range(nX):
         q = {}
         if state == 1:
-            q = {0:(21,-10),1:(21,-10),2:(21,-10),3:(21,-10)}
+            x = (21,-10)
+            q = {0: x,1:x,2:x,3:x}
             p[state] = q
             continue
         elif state == 3:
-            q = {0:(13,-5),1:(13,-5),2:(13,-5),3:(13,-5)}
+            x = (13,-5)
+            q = {0: x,1:x,2:x,3:x}
             p[state] = q
             continue
         else: 
@@ -142,24 +160,26 @@ def init(nX,nU):
                             q[action] = (state + 1,0)
         p[state] = q
 
-    for state in range(nX):
-        print(p[state])
+    # for state in range(nX):
+    #     print(state,"  ",p[state])
 
     return p
 
 
-# def main():
-#     init()
-#     return None
-
 if __name__ == "__main__":
-    # main()
     nX = 5*5
     nU = 4
     P = init(nX,nU)
     num_iter = 100
     mdp = MDP(P,nX,nU)
-    V1,pi1 = value_iteration(mdp, num_iter)
-    V2,pi2 = policy_iteration(mdp, num_iter)
-    displayValuesText(V2,pi2)
 
+    # V1,pi1 = value_iteration(mdp, num_iter)
+    # displayValuesText(V1,pi1)
+
+    # V2,pi2 = policy_iteration(mdp, num_iter)
+    # displayValuesText(V2,pi2)
+
+    # V3,pi3 = Qvalue_iteration(mdp, num_iter)
+    # displayValuesText(V3,pi3)
+    
+    
